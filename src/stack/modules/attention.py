@@ -74,10 +74,14 @@ class TabularAttentionLayer(nn.Module):
 
         cell_attn_dim = token_dim
         cell_attn_heads = n_heads
-        # Ensure cell attention uses a valid head count even for tiny token_dim (e.g., tests).
+        # The model dimension must be divisible by the number of attention heads.
+        # If not, find the largest valid number of heads smaller than or equal to n_heads.
         if cell_attn_dim % cell_attn_heads != 0:
-            cell_attn_heads = max(1, min(n_heads, cell_attn_dim))
-            if cell_attn_dim % cell_attn_heads != 0:
+            for h in range(min(n_heads, cell_attn_dim), 0, -1):
+                if cell_attn_dim % h == 0:
+                    cell_attn_heads = h
+                    break
+            else:  # This fallback should ideally not be reached if cell_attn_dim >= 1
                 cell_attn_heads = 1
         self.cell_attn = MultiHeadAttention(cell_attn_dim, cell_attn_heads, dropout)
         self.cell_norm = nn.LayerNorm(cell_attn_dim)
