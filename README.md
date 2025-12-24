@@ -167,3 +167,8 @@ hvg_genes = compute_hvg_union(configs, n_top_genes=1000, output_path="hvg.pkl")
 ## Citation
 
 If you use Stack in your research, please cite the Stack [paper](https://arcinstitute.org/manuscripts/Stack).
+
+## Licenses
+Stack code is [licensed](LICENSE) under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 (CC BY-NC-SA 4.0).
+
+The model weights and output are licensed under the [Arc Research Institute Stack Model Non-Commercial License](MODEL_LICENSE.md) and subject to the [Arc Research Institute Stack Model Acceptable Use Policy](MODEL_ACCEPTABLE_USE_POLICY.md).
