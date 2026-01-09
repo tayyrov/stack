@@ -166,7 +166,7 @@ hvg_genes = compute_hvg_union(configs, n_top_genes=1000, output_path="hvg.pkl")
 
 ## Citation
 
-If you use Stack in your research, please cite the Stack [paper](https://arcinstitute.org/manuscripts/Stack).
+If you use Stack in your research, please cite the Stack [paper](https://www.biorxiv.org/content/10.1101/2026.01.09.698608v1).
 
 ## Licenses
 Stack code is [licensed](LICENSE) under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 (CC BY-NC-SA 4.0).
