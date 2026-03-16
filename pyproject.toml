@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arc-stack"
-version = "0.1.2"
+version = "0.1.3"
 description = "Stack is a single-cell foundation model that enables in-context learning at inference time."
 readme = "README.md"
 license = { file = "LICENSE" }
