@@ -627,6 +627,10 @@ class InferenceMixin:
         is_base_cell_mask = np.zeros(total_cells, dtype=bool)
         is_masked_list = []
         base_idx_ptr = 0
+        # Give unique names to avoid inter-adata collisions and duplicates
+        base_adata.obs_names = [f"base_{i}" for i in range(base_adata.n_obs)]
+        test_adata.obs_names = [f"test_{i}" for i in range(test_adata.n_obs)]
+
         for i in range(num_test_samples):
             # Get test cells
             start, end = i * n_test_cells, (i + 1) * n_test_cells
@@ -642,15 +646,27 @@ class InferenceMixin:
             current_base_indices = base_indices[idx_base]
             base_idx_ptr = (base_idx_ptr + n_base_cells) % len(base_indices)
 
+            # Manually construct sub-batches to avoid slice/concat warnings for duplicated indices
+            # Base sub-batch
+            base_sub_x = base_adata.X[current_base_indices]
+            base_sub_obs = base_adata.obs.iloc[current_base_indices].copy()
+            base_sub_obs.index = [f"base_{idx}_{j}" for j, idx in enumerate(current_base_indices)]
+            base_sub = ad.AnnData(X=base_sub_x, obs=base_sub_obs, var=base_adata.var)
+            
+            # Test sub-batch
+            test_sub_x = test_adata.X[current_test_indices]
+            test_sub_obs = test_adata.obs.iloc[current_test_indices].copy()
+            test_sub_obs.index = [f"test_{idx}_{j}" for j, idx in enumerate(current_test_indices)]
+            test_sub = ad.AnnData(X=test_sub_x, obs=test_sub_obs, var=test_adata.var)
+
             # Concatenate AnnData objects for this sample
             sample_adata = ad.concat(
-                [base_adata[current_base_indices], test_adata[current_test_indices]],
+                [base_sub, test_sub],
                 join='inner',
                 axis=0,
                 label='origin',
                 keys=['base', 'test']
             )
-            sample_adata.obs_names_make_unique()
             mixed_adata_list.append(sample_adata)
             if is_masked is not None:
                 is_masked_list.append(np.asarray(is_masked)[current_test_indices])
