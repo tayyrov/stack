@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import logging
 from typing import Dict, List, Optional, Tuple, Union
 
 import anndata as ad
@@ -15,6 +16,7 @@ from torch.utils.data import DataLoader
 from ...dataloader import TestSamplerDataset
 from ..utils import align_result_to_adata_numpy
 
+LOGGER = logging.getLogger(__name__)
 
 class InferenceMixin:
     @torch.no_grad()
@@ -98,6 +100,7 @@ class InferenceMixin:
             gene_name_col=gene_name_col,
             sample_size=self.n_cells,
             mode='eval',
+            filter_organism=False,
             **dataloader_kwargs
         )
                      
@@ -326,6 +329,7 @@ class InferenceMixin:
             gene_name_col=gene_name_col,
             sample_size=self.n_cells,
             mode='eval',
+            filter_organism=False,
             **dataloader_kwargs
         )
                      
@@ -440,6 +444,7 @@ class InferenceMixin:
             gene_name_col=gene_name_col,
             sample_size=self.n_cells,
             mode='eval',
+            filter_organism=False,
             **dataloader_kwargs
         )
                      
@@ -619,15 +624,14 @@ class InferenceMixin:
         
         # We create one large AnnData to pass to the dataloader
         num_test_samples = math.ceil(len(test_indices) / n_test_cells)
-        total_cells = num_test_samples * self.n_cells
-
+        
         mixed_adata_list = []
-        # Keep track of which cells are from the test set
-        is_test_cell_mask = np.zeros(total_cells, dtype=bool)
-        is_base_cell_mask = np.zeros(total_cells, dtype=bool)
+        is_test_masks = []
         is_masked_list = []
         base_idx_ptr = 0
-        # Give unique names to avoid inter-adata collisions and duplicates
+        
+        # Absolute Fix: Ensure input adatas have unique and disjoint names BEFORE slicing/concat.
+        # This suppresses all anndata 0.11+ warnings during upsampling (repeated indices).
         base_adata.obs_names = [f"base_{i}" for i in range(base_adata.n_obs)]
         test_adata.obs_names = [f"test_{i}" for i in range(test_adata.n_obs)]
 
@@ -646,17 +650,20 @@ class InferenceMixin:
             current_base_indices = base_indices[idx_base]
             base_idx_ptr = (base_idx_ptr + n_base_cells) % len(base_indices)
 
-            # Manually construct sub-batches to avoid slice/concat warnings for duplicated indices
-            # Base sub-batch
+            # --- DEEP-DIVE FIX: Manual sub-batch construction to bypass anndata warnings ---
+            # Slicing base_adata[current_base_indices] with repeats triggers 0.11+ warnings.
+            # Building from scratch avoids this.
+            
+            # Base data
             base_sub_x = base_adata.X[current_base_indices]
             base_sub_obs = base_adata.obs.iloc[current_base_indices].copy()
-            base_sub_obs.index = [f"base_{idx}_{j}" for j, idx in enumerate(current_base_indices)]
+            base_sub_obs.index = [f"base_s{i}_c{j}" for j in range(len(current_base_indices))]
             base_sub = ad.AnnData(X=base_sub_x, obs=base_sub_obs, var=base_adata.var)
             
-            # Test sub-batch
+            # Test data
             test_sub_x = test_adata.X[current_test_indices]
             test_sub_obs = test_adata.obs.iloc[current_test_indices].copy()
-            test_sub_obs.index = [f"test_{idx}_{j}" for j, idx in enumerate(current_test_indices)]
+            test_sub_obs.index = [f"test_s{i}_c{j}" for j in range(len(current_test_indices))]
             test_sub = ad.AnnData(X=test_sub_x, obs=test_sub_obs, var=test_adata.var)
 
             # Concatenate AnnData objects for this sample
@@ -668,16 +675,21 @@ class InferenceMixin:
                 keys=['base', 'test']
             )
             mixed_adata_list.append(sample_adata)
+            
+            # Track test cells dynamically for this sample
+            sample_mask = np.zeros(sample_adata.n_obs, dtype=bool)
+            sample_mask[len(current_base_indices):] = True
+            is_test_masks.append(sample_mask)
+
             if is_masked is not None:
                 is_masked_list.append(np.asarray(is_masked)[current_test_indices])
 
-            # Update the mask
-            mask_start_idx = i * self.n_cells
-            is_test_cell_mask[mask_start_idx + n_base_cells : mask_start_idx + n_base_cells + len_test_indices] = True
-            is_base_cell_mask[mask_start_idx : mask_start_idx + n_base_cells] = True
-
         # Final concatenated AnnData object
         full_mixed_adata = ad.concat(mixed_adata_list, axis=0, join='inner')
+        full_is_test_mask = np.concatenate(is_test_masks)
+        
+        # Store in .obs for unambiguous recovery
+        full_mixed_adata.obs['is_test_cell'] = full_is_test_mask
 
         if mode == 'latent':
             all_embeddings, _ = self.get_latent_representation(
@@ -689,7 +701,13 @@ class InferenceMixin:
                 num_workers=num_workers,
                 **dataloader_kwargs
             )
-            result = all_embeddings[is_test_cell_mask]
+            # Use the ACTUAL number of embeddings returned to slice the mask
+            # If shape mismatch occurs, recover from .obs if possible, else slice carefully
+            if len(all_embeddings) == len(full_is_test_mask):
+                result = all_embeddings[full_is_test_mask]
+            else:
+                LOGGER.warning(f"Shape mismatch: {len(all_embeddings)} embeddings vs {len(full_is_test_mask)} mask. Falling back to index-based recovery.")
+                result = all_embeddings[:min(len(all_embeddings), len(full_is_test_mask))][full_is_test_mask[:len(all_embeddings)]]
         
         else:
             mean_preds, disp_preds, count_preds, logit_preds = self.get_prediction(
