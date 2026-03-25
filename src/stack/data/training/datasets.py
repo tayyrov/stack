@@ -955,13 +955,17 @@ class TestSamplerDataset(Dataset):
             target_indices_in_result = np.array(list(gene_mapping.keys()))
             source_indices_in_file = np.array(list(gene_mapping.values()))
             
-            # Get expression data
+            # Use unique indices for slicing to avoid anndata warning with duplicates
+            unique_rows, inverse_rows = np.unique(absolute_indices_to_load, return_inverse=True)
+            
+            # Get expression data for unique indices
             if self.file_info['use_raw'] and adata.raw is not None:
-                # Use raw data
-                expr_data = adata.raw.X[absolute_indices_to_load, :]
+                expr_data_unique = adata.raw.X[unique_rows, :]
             else:
-                # Use main data
-                expr_data = adata.X[absolute_indices_to_load, :]
+                expr_data_unique = adata.X[unique_rows, :]
+            
+            # Reconstruct the full batch (with duplicates) using numpy
+            expr_data = expr_data_unique[inverse_rows, :]
             
             # Convert sparse to dense if needed
             if hasattr(expr_data, 'toarray'):
