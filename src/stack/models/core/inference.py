@@ -650,6 +650,7 @@ class InferenceMixin:
                 label='origin',
                 keys=['base', 'test']
             )
+            sample_adata.obs_names_make_unique()
             mixed_adata_list.append(sample_adata)
             if is_masked is not None:
                 is_masked_list.append(np.asarray(is_masked)[current_test_indices])
@@ -811,6 +812,7 @@ class InferenceMixin:
                 label='origin',
                 keys=['base', 'test']
             )
+            sample_adata.obs_names_make_unique()
             mixed_adata_list.append(sample_adata)
 
             # Update the mask
