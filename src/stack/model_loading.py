@@ -18,7 +18,7 @@ def load_model_from_checkpoint(
     checkpoint_path: str,
     model_class: str = "scShiftAttentionModel",
     device: Optional["torch.device"] = None,
-    strict: bool = True,
+    strict: bool = False,
 ) -> "torch.nn.Module":
     """Load a trained model from a checkpoint into evaluation mode.
 

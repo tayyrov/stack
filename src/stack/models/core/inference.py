@@ -600,6 +600,13 @@ class InferenceMixin:
 
         self.eval()
 
+        # ROOT CAUSE FIX: Make obs_names unique BEFORE .copy() — AnnData triggers
+        # duplicate obs_names warning during copy() if names are not unique.
+        if not isinstance(base_adata_or_path, str) and not base_adata_or_path.obs_names.is_unique:
+            base_adata_or_path.obs_names = [f"base_{i}" for i in range(base_adata_or_path.n_obs)]
+        if not isinstance(test_adata_or_path, str) and not test_adata_or_path.obs_names.is_unique:
+            test_adata_or_path.obs_names = [f"test_{i}" for i in range(test_adata_or_path.n_obs)]
+
         if isinstance(base_adata_or_path, str):
             base_adata = ad.read_h5ad(base_adata_or_path)
         else:
@@ -630,8 +637,7 @@ class InferenceMixin:
         is_masked_list = []
         base_idx_ptr = 0
         
-        # Absolute Fix: Ensure input adatas have unique and disjoint names BEFORE slicing/concat.
-        # This suppresses all anndata 0.11+ warnings during upsampling (repeated indices).
+        # Ensure names remain unique and disjoint after copy
         base_adata.obs_names = [f"base_{i}" for i in range(base_adata.n_obs)]
         test_adata.obs_names = [f"test_{i}" for i in range(test_adata.n_obs)]
 
